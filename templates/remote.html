@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Medición Óptica - Acceso Remoto</title>
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --secondary: #3498db;
+            --success: #27ae60;
+            --error: #e74c3c;
+            --info: #3498db;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+
+        .video-container {
+            position: relative;
+            width: 640px;
+            margin: 0 auto 20px;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        #video {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+
+        #canvas {
+            display: none;
+        }
+
+        .controls {
+            text-align: center;
+            margin: 25px 0;
+        }
+
+        .btn {
+            padding: 12px 30px;
+            font-size: 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 0 10px;
+        }
+
+        .btn-primary {
+            background: var(--secondary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2980b9;
+        }
+
+        .measurement-container {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+
+        .measurement-item {
+            margin: 10px 0;
+            padding: 8px;
+            background: white;
+            border-radius: 4px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+        }
+
+        .status {
+            margin: 15px 0;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+            display: none;
+        }
+
+        .status-success { background: #dff0d8; color: var(--success); }
+        .status-error { background: #f8d7da; color: var(--error); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Sistema de Medición Óptica - Acceso Remoto</h1>
+        <div class="video-container">
+            <video id="video" autoplay playsinline></video>
+            <canvas id="canvas"></canvas>
+        </div>
+        <div class="controls">
+            <button id="capture" class="btn btn-primary" disabled>Capturar y Medir</button>
+        </div>
+        <div class="measurement-container">
+            <div class="measurement-item">Distancia ojo izquierdo a nariz: <span id="left-eye">-</span> cm</div>
+            <div class="measurement-item">Distancia ojo derecho a nariz: <span id="right-eye">-</span> cm</div>
+            <div class="measurement-item">Distancia entre ojos: <span id="between-eyes">-</span> cm</div>
+        </div>
+        <div id="status" class="status"></div>
+    </div>
+
+    <script>
+        const video = document.getElementById('video');
+        const canvas = document.getElementById('canvas');
+        const captureButton = document.getElementById('capture');
+        const statusElement = document.getElementById('status');
+        const ctx = canvas.getContext('2d');
+
+        // Inicializar cámara
+        async function initCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ 
+                    video: { 
+                        facingMode: 'user',
+                        width: { ideal: 640 },
+                        height: { ideal: 480 }
+                    } 
+                });
+                video.srcObject = stream;
+                captureButton.disabled = false;
+            } catch (err) {
+                console.error('Error al acceder a la cámara:', err);
+                showStatus('Error al acceder a la cámara. Por favor, asegúrate de dar permisos.', 'error');
+            }
+        }
+
+        // Capturar y enviar imagen
+        async function captureAndMeasure() {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            ctx.drawImage(video, 0, 0);
+
+            try {
+                const imageData = canvas.toDataURL('image/jpeg');
+                const response = await fetch('/api/measure', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        image: imageData.split(',')[1]
+                    })
+                });
+
+                const data = await response.json();
+                if (data.status === 'success') {
+                    document.getElementById('left-eye').textContent = data.measurements.left_eye_to_nose;
+                    document.getElementById('right-eye').textContent = data.measurements.right_eye_to_nose;
+                    document.getElementById('between-eyes').textContent = data.measurements.between_eyes;
+                    showStatus('Mediciones realizadas con éxito', 'success');
+                } else {
+                    showStatus(data.error || 'Error al procesar la imagen', 'error');
+                }
+            } catch (err) {
+                console.error('Error:', err);
+                showStatus('Error al procesar la imagen', 'error');
+            }
+        }
+
+        function showStatus(message, type) {
+            statusElement.textContent = message;
+            statusElement.className = `status status-${type}`;
+            statusElement.style.display = 'block';
+            setTimeout(() => {
+                statusElement.style.display = 'none';
+            }, 3000);
+        }
+
+        // Event listeners
+        captureButton.addEventListener('click', captureAndMeasure);
+        
+        // Iniciar cámara al cargar la página
+        initCamera();
+    </script>
+</body>
+</html>

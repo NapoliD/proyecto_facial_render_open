@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Medición Óptica</title>
+    <style>
+        :root {
+            --primary: #2c3e50;
+            --secondary: #3498db;
+            --success: #27ae60;
+            --error: #e74c3c;
+            --info: #3498db;
+        }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+
+        .video-container {
+            position: relative;
+            width: 640px;
+            margin: 0 auto 20px;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        #video-feed {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+
+        .controls {
+            text-align: center;
+            margin: 25px 0;
+        }
+
+        .btn {
+            padding: 12px 30px;
+            font-size: 16px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin: 0 10px;
+        }
+
+        .btn-primary {
+            background: var(--secondary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #2980b9;
+        }
+
+        .status {
+            margin: 15px 0;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+            display: none;
+        }
+
+        .status-success { background: #dff0d8; color: var(--success); }
+        .status-error { background: #f8d7da; color: var(--error); }
+        .status-info { background: #d1e7dd; color: var(--info); }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--secondary);
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .measurement-list {
+            max-height: 300px;
+            overflow-y: auto;
+            border-top: 1px solid #eee;
+            margin-top: 15px;
+        }
+
+        .measurement-item {
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .measurement-item:last-child {
+            border-bottom: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Sistema de Medición Óptica</h1>
+        
+        <div class="video-container">
+            <img id="video-feed" src="{{ url_for('video_feed') }}">
+        </div>
+
+        <div class="controls">
+            <button class="btn btn-primary" id="capture-btn">Guardar Mediciones</button>
+            <div id="loading" class="status status-info">
+                <div class="spinner"></div> Procesando...
+            </div>
+            <div id="status" class="status"></div>
+        </div>
+
+        <div class="results">
+            <h3>Historial de Mediciones</h3>
+            <div id="measurements-list" class="measurement-list"></div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', async () => {
+            // Cargar historial al iniciar
+            try {
+                const response = await fetch('/obtener_mediciones');
+                const data = await response.json();
+                data.forEach(addMeasurement);
+            } catch (error) {
+                console.error('Error cargando historial:', error);
+            }
+        });
+
+        const captureBtn = document.getElementById('capture-btn');
+        const loadingDiv = document.getElementById('loading');
+        const statusDiv = document.getElementById('status');
+        const measurementsList = document.getElementById('measurements-list');
+
+        captureBtn.addEventListener('click', async () => {
+            loadingDiv.style.display = 'block';
+            statusDiv.style.display = 'none';
+            
+            try {
+                const response = await fetch('/guardar_mediciones', { method: 'POST' });
+                const data = await response.json();
+                
+                if (data.estado === 'éxito') {
+                    addMeasurement(data.datos);
+                    showStatus('Mediciones guardadas', 'success');
+                } else {
+                    showStatus(data.mensaje || 'Error desconocido', 'error');
+                }
+            } catch (error) {
+                showStatus('Error de conexión', 'error');
+                console.error('Error:', error);
+            } finally {
+                loadingDiv.style.display = 'none';
+            }
+        });
+
+        function showStatus(message, type) {
+            statusDiv.textContent = message;
+            statusDiv.className = `status status-${type}`;
+            statusDiv.style.display = 'block';
+            
+            setTimeout(() => {
+                statusDiv.style.display = 'none';
+            }, 3000);
+        }
+
+        function addMeasurement(data) {
+            const item = document.createElement('div');
+            item.className = 'measurement-item';
+            
+            const date = new Date(data.timestamp);
+            const formattedDate = date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+            
+            item.innerHTML = `
+                <div><strong>${formattedDate}</strong></div>
+                <div>Ojo Izq-Nariz: ${data.izquierda_nariz} cm</div>
+                <div>Ojo Der-Nariz: ${data.derecha_nariz} cm</div>
+                <div>Entre Ojos: ${data.entre_ojos} cm</div>
+            `;
+            
+            measurementsList.prepend(item);
+        }
+    </script>
+</body>
+</html>
